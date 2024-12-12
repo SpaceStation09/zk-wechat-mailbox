@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "strictNullChecks": true
+  },
+  "include": ["./test", "./types", "./SmartContractProjectConfig", "./ignition"],
+  "files": ["./hardhat.config.ts"]
+}

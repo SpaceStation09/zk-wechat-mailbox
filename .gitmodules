@@ -1,0 +1,3 @@
+[submodule "SmartContractProjectConfig"]
+	path = SmartContractProjectConfig
+	url = git@github.com:SpaceStation09/SmartContractProjectConfig.git

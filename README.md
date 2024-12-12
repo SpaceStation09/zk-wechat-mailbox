@@ -1,49 +1,13 @@
-# Hardhat Template
+# zk redpacket wechat
 
-To develop a hardhat contract project, we always need some frequently used dependencies which are not included in the basic hardhat project. Furthermore, we also need several tools to unify the coding style between collaborative workers. In fact, these pre-requisite are always configured similarly in different projects. So, I established this template to help us start a hardhat project in a more convenient way.
+本项目基于 [`zk-email`](https://docs.zk.email/zk-email-verifier/), 搭建了一个需要微信身份认证的红包应用。 用户通过 zkp 证明自己持有一个 wechat 账户即可领取一个 onchain 的红包。
 
-## Start
+## 设计
 
-### Install dependencies
+### circuit
 
-```shell
-npm install
-```
+circuit 方面会包含如下 component：
 
-### Commands
-
-#### Compile & Generate Types
-
-```shell
-npm run compile
-```
-
-#### Test
-
-```shell
-npm run test
-```
-
-#### Deploy Contract
-
-Currently, we use [Hardhat Ignition](https://hardhat.org/ignition/docs/getting-started#overview) to help deploy & verify contract.
-
-```shell
-npx hardhat ignition deploy ./ignition/modules/[YOUR_DEPLOY_MODULE].ts --network <your-network>
-```
-
-### Get extensions
-
-Recommend extensions are listed in the file `./.vscode/extensions.json`. If you go to vscode extension list, you could see all recommended extensions directly.
-
-### Final step
-
-Now you can start your development!
-
-## Contribute
-
-Any contribution is welcomed to make it better.
-
-If you have any questions, please create an [issue](https://github.com/SpaceStation09/hardhat-template/issues).
-
-**Enjoy!**
+- 对于`tencent.com`发出的 email 的验证(dkim signature).
+- 解析出特定 regex 匹配到的邮件中的用户的 wechat username。
+- 将 `ethereum address` 添加到 circuit 中, 这将以 input signal 的形式，但我们目前无需为其施加约束。

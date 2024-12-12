@@ -10,3 +10,7 @@ artifacts/
 .openzeppelin/
 .env
 types/
+
+*.eml
+artifacts/
+dist

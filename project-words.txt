@@ -14,6 +14,7 @@ eqeqeq
 espace
 hardfork
 hexlify
+IERC
 kardia
 mixedcase
 moonriver
@@ -21,6 +22,10 @@ nomiclabs
 prettierignore
 reentrancy
 snakecase
+snarkjs
 solhint
 typechain
+viem
+wechat
 xdai
+zkey

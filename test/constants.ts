@@ -2,6 +2,8 @@ import { BigNumberish } from "ethers";
 
 export const tencentDKIMPubkeyHash = "0x181ab950d973ee53838532ecb1b8b11528f6ea7ab08e2868fb3218464052f953";
 
+export const verifiedRecipient = "0x94871d770973D93d6c8912E3D1950F3DAD9B4E30";
+
 export const signals: Signals = [
   "0x181ab950d973ee53838532ecb1b8b11528f6ea7ab08e2868fb3218464052f953",
   "0x000000000000000000000000000000000039306e6f69746174535f6563617053",

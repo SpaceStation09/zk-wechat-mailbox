@@ -29,7 +29,6 @@ contract ZKRedpacket {
     uint16 public constant BYTES_IN_PACKED_SIGNAL = 31;
     uint32 public constant PUBKEY_HASH_INDEX_IN_SIGNAL = 0;
     uint32 public constant USERNAME_INDEX_IN_SIGNAL = 1;
-    // uint32 public constant usernameLengthInSignal = 1;
     uint32 public constant ADDRESS_INDEX_IN_SIGNAL = 2;
 
     string public constant DOMAIN = "tencent.com";
@@ -140,7 +139,7 @@ contract ZKRedpacket {
         } else {
             claimedTokens = remainingTokens / (pktNumber - claimedNumber);
         }
-        rp.packed.packed1 = _rewriteBox(packed.packed2, 224, 15, claimedNumber + 1);
+        rp.packed.packed1 = _rewriteBox(packed.packed1, 128, 96, remainingTokens - claimedTokens);
         rp.claimedList[_recipient] = claimedTokens;
         rp.packed.packed2 = _rewriteBox(packed.packed2, 224, 15, claimedNumber + 1);
 
@@ -169,7 +168,8 @@ contract ZKRedpacket {
     }
 
     function checkAvailability(
-        bytes32 _id
+        bytes32 _id,
+        address _user
     )
         public
         view
@@ -183,7 +183,7 @@ contract ZKRedpacket {
             _unbox(packed.packed2, 239, 15),
             _unbox(packed.packed2, 224, 15),
             block.timestamp > _unbox(packed.packed1, 224, 32),
-            rp.claimedList[msg.sender]
+            rp.claimedList[_user]
         );
     }
 

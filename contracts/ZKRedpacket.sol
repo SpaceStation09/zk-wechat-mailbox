@@ -121,12 +121,13 @@ contract ZKRedpacket {
         require(_recipient == addressInCircuit, "Invalid recipient");
         require(rp.claimedList[_recipient] == 0, "Already claimed");
         bytes32 userNameHash = keccak256(abi.encodePacked(_signals[USERNAME_INDEX_IN_SIGNAL]));
-        require(!rp.claimedUsername[userNameHash], "This username already used");
-        rp.claimedUsername[userNameHash] = true;
 
         // Check email validity via zk
         (bool success, string memory errorMessage) = _checkProof(_domain, _proof, _signals);
         if (!success) revert(errorMessage);
+
+        require(!rp.claimedUsername[userNameHash], "This username already used");
+        rp.claimedUsername[userNameHash] = true;
 
         uint claimedTokens;
         uint tokenType = _unbox(packed.packed2, 254, 1);

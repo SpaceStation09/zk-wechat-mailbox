@@ -26,6 +26,7 @@ describe("Redpacket Test", () => {
   let proof: BigNumberish[];
   let snapshot: SnapshotRestorer;
   const domain = "tencent.com";
+  const seed = keccak256(toUtf8Bytes("test"));
 
   before(async () => {
     log(info("    Test setup phase may take some time since it needs to generate proof data in advance... Est. 1min"));
@@ -47,7 +48,6 @@ describe("Redpacket Test", () => {
   });
 
   it("normal workflow", async () => {
-    const seed = keccak256(toUtf8Bytes("test"));
     await rp.createPacket(10, false, 1800, seed, 0, ZeroAddress, parseEther("1"), { value: parseEther("1") });
     const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
     const rpId = creationSuccessEvent.args.id;
@@ -76,8 +76,71 @@ describe("Redpacket Test", () => {
     expect(claimedAmount).to.be.eq(parseEther("0.1"));
   });
 
+  it("normal workflow for random mode", async () => {
+    await rp.createPacket(10, true, 1800, seed, 0, ZeroAddress, parseEther("1"), { value: parseEther("1") });
+    const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+    const rpId = creationSuccessEvent.args.id;
+
+    const balanceBefore = await hre.ethers.provider.getBalance(verifiedRecipient);
+    await rp.claim(rpId, verifiedRecipient, domain, proof, signals);
+    const balanceAfterClaim = await hre.ethers.provider.getBalance(verifiedRecipient);
+    expect(balanceAfterClaim).to.be.gt(balanceBefore);
+    const received = balanceAfterClaim - balanceBefore;
+
+    const claimSuccessEvent = (await rp.queryFilter(rp.filters.ClaimSuccess()))[0];
+    const claimId = claimSuccessEvent.args.id;
+    const claimedToken = claimSuccessEvent.args.claimedAmount;
+    const tokenAddr = claimSuccessEvent.args.tokenAddress;
+    expect(claimId).to.be.eq(rpId);
+    expect(tokenAddr).to.be.eq(ZeroAddress);
+    expect(received).to.be.eq(claimedToken);
+
+    let { balance, pktNumber, claimedPkts, expired, claimedAmount } = await rp.checkAvailability(
+      rpId,
+      verifiedRecipient,
+    );
+
+    const remainingToken = parseEther("1") - received;
+    expect(balance).to.be.eq(remainingToken);
+    expect(pktNumber).to.be.eq(10);
+    expect(claimedPkts).to.be.eq(1);
+    expect(expired).to.be.eq(false);
+    expect(claimedAmount).to.be.eq(received);
+  });
+
+  it("normal workflow with ERC20", async () => {
+    const testToken = await hre.ethers.deployContract("TestToken", [parseEther("1000")]);
+    await testToken.approve(await rp.getAddress(), parseEther("1000"));
+    await rp.createPacket(10, false, 1800, seed, 1, await testToken.getAddress(), parseEther("10"));
+    const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+    const rpId = creationSuccessEvent.args.id;
+
+    const balanceBefore = await testToken.balanceOf(verifiedRecipient);
+    await rp.claim(rpId, verifiedRecipient, domain, proof, signals);
+    const balanceAfterClaim = await testToken.balanceOf(verifiedRecipient);
+
+    expect(balanceAfterClaim - balanceBefore).to.be.eq(parseEther("1"));
+    const claimSuccessEvent = (await rp.queryFilter(rp.filters.ClaimSuccess()))[0];
+    const claimId = claimSuccessEvent.args.id;
+    const claimedToken = claimSuccessEvent.args.claimedAmount;
+    const tokenAddr = claimSuccessEvent.args.tokenAddress;
+    expect(claimId).to.be.eq(rpId);
+    expect(claimedToken).to.be.eq(parseEther("1"));
+    expect(tokenAddr).to.be.eq(await testToken.getAddress());
+
+    let { balance, pktNumber, claimedPkts, expired, claimedAmount } = await rp.checkAvailability(
+      rpId,
+      verifiedRecipient,
+    );
+
+    expect(balance).to.be.eq(parseEther("9"));
+    expect(pktNumber).to.be.eq(10);
+    expect(claimedPkts).to.be.eq(1);
+    expect(expired).to.be.eq(false);
+    expect(claimedAmount).to.be.eq(parseEther("1"));
+  });
+
   it("claim will fail if the recipient is not committed in zk", async () => {
-    const seed = keccak256(toUtf8Bytes("test"));
     await rp.createPacket(10, false, 1800, seed, 0, ZeroAddress, parseEther("1"), { value: parseEther("1") });
     const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
     const rpId = creationSuccessEvent.args.id;
@@ -88,7 +151,6 @@ describe("Redpacket Test", () => {
   });
 
   it("claim will fail if the domain is not valid", async () => {
-    const seed = keccak256(toUtf8Bytes("test"));
     await rp.createPacket(10, false, 1800, seed, 0, ZeroAddress, parseEther("1"), { value: parseEther("1") });
     const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
     const rpId = creationSuccessEvent.args.id;
@@ -101,7 +163,6 @@ describe("Redpacket Test", () => {
   });
 
   it("claim will fail if the username is used before", async () => {
-    const seed = keccak256(toUtf8Bytes("test"));
     await rp.createPacket(10, false, 1800, seed, 0, ZeroAddress, parseEther("1"), { value: parseEther("1") });
     const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
     const rpId = creationSuccessEvent.args.id;

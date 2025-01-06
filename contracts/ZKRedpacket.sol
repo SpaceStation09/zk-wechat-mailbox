@@ -41,6 +41,8 @@ contract ZKRedpacket {
     event CreationSuccess(
         bytes32 indexed id,
         uint256 tokenAmount,
+        string name,
+        string message,
         address creator,
         uint256 creationTime,
         address tokenAddr,
@@ -64,12 +66,15 @@ contract ZKRedpacket {
         bool _ifRandom,
         uint256 _duration,
         bytes32 _seed,
+        string memory _name,
+        string memory _message,
         TokenType _tokenType,
         address _tokenAddr,
         uint256 _tokenAmount
     ) external payable {
         nonce++;
         require(_tokenAmount >= _number, "#tokens > #packets");
+        //TODO: number upper limit
         require(_number > 0 && _number < 256, "packet number should be in range [1, 255]");
 
         uint256 receivedAmount = _tokenAmount;
@@ -82,7 +87,7 @@ contract ZKRedpacket {
             require(receivedAmount >= _number, "#received token > #packets");
         }
 
-        bytes32 packetId = keccak256(abi.encodePacked(msg.sender, block.timestamp, nonce, _seed));
+        bytes32 packetId = keccak256(abi.encodePacked(msg.sender, block.timestamp, nonce, seed, _seed));
         uint8 randomType = _ifRandom ? 1 : 0;
         RedPacket storage rp = rpById[packetId];
         rp.packed.packed1 = _wrap1(receivedAmount, _duration);
@@ -92,6 +97,8 @@ contract ZKRedpacket {
         emit CreationSuccess(
             packetId,
             receivedAmount,
+            _name,
+            _message,
             msg.sender,
             block.timestamp,
             _tokenAddr,
@@ -104,7 +111,6 @@ contract ZKRedpacket {
     function claim(
         bytes32 _id,
         address payable _recipient,
-        string memory _domain,
         uint[8] calldata _proof,
         uint[3] calldata _signals
     ) external {
@@ -123,7 +129,7 @@ contract ZKRedpacket {
         bytes32 userNameHash = keccak256(abi.encodePacked(_signals[USERNAME_INDEX_IN_SIGNAL]));
 
         // Check email validity via zk
-        (bool success, string memory errorMessage) = _checkProof(_domain, _proof, _signals);
+        (bool success, string memory errorMessage) = _checkProof(DOMAIN, _proof, _signals);
         if (!success) revert(errorMessage);
 
         require(!rp.claimedUsername[userNameHash], "This username already used");

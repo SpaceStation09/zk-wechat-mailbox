@@ -24,12 +24,16 @@ contract MailboxFactory {
         if (codeSize > 0) {
             revert("Mailbox already deployed");
         } else {
-            TokenMailbox mailbox = new TokenMailbox(verifier, dkimRegistry, _nameHash);
+            TokenMailbox mailbox = new TokenMailbox{salt: _nameHash}(verifier, dkimRegistry, _nameHash);
             emit MailboxDeployed(_nameHash, address(mailbox));
         }
     }
 
     function computeMailboxAddress(bytes32 _nameHash) public view returns (address) {
-        return Create2.computeAddress(_nameHash, keccak256(type(TokenMailbox).creationCode));
+        bytes memory byteCode = abi.encodePacked(
+            type(TokenMailbox).creationCode,
+            abi.encode(address(verifier), address(dkimRegistry), _nameHash)
+        );
+        return Create2.computeAddress(_nameHash, keccak256(byteCode));
     }
 }

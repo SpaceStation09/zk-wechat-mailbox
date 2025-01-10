@@ -18,7 +18,7 @@ template wechatExport(maxHeaderLength, maxBodyLength, n, k, packSize) {
   signal input emailBody[maxBodyLength];
   signal input emailBodyLength;
   signal input ethereumAddress;
-  
+
   signal output pubkeyHash;
 
 
@@ -66,8 +66,14 @@ template wechatExport(maxHeaderLength, maxBodyLength, n, k, packSize) {
     (handleRegexOut, handleRegexReveal) <== WechatExportMailRegex(base64DecodedSize)(emailDecoded.out);
     handleRegexOut === 1;
 
-    signal output handlePackedOut[computeIntChunkLength(handleMaxLength)];
+    var inputLength = computeIntChunkLength(handleMaxLength);
+    signal handlePackedOut[inputLength];
     handlePackedOut <== PackRegexReveal(base64DecodedSize, handleMaxLength)(handleRegexReveal, handleRegexIdx);
+
+    signal output usernameHash;
+    component poseidonComponent = Poseidon(inputLength);
+    poseidonComponent.inputs <== handlePackedOut;
+    usernameHash <== poseidonComponent.out;
 }
 
 component main { public [ethereumAddress] } = wechatExport(704, 4288, 121, 17, 7);

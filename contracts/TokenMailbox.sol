@@ -41,7 +41,7 @@ contract TokenMailbox {
     ) public {
         address addressInCircuit = address(uint160(_signals[ADDRESS_INDEX_IN_SIGNAL]));
         require(_recipient == addressInCircuit, "Invalid recipient");
-        bytes32 nameHash = keccak256(abi.encodePacked(_signals[USERNAME_INDEX_IN_SIGNAL]));
+        bytes32 nameHash = bytes32(_signals[USERNAME_INDEX_IN_SIGNAL]);
         require(nameHash == userNameHash, "Invalid username");
         // Check email validity via zk
         (bool success, string memory errorMessage) = _checkProof(DOMAIN, _proof, _signals);

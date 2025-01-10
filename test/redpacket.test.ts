@@ -1,7 +1,18 @@
 import { SnapshotRestorer, takeSnapshot } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import chalk from "chalk";
-import { BigNumberish, keccak256, parseEther, Signer, toUtf8Bytes, ZeroAddress, zeroPadValue } from "ethers";
+import {
+  AbiCoder,
+  BigNumberish,
+  keccak256,
+  parseEther,
+  Signer,
+  solidityPacked,
+  toBeHex,
+  toUtf8Bytes,
+  ZeroAddress,
+  zeroPadValue,
+} from "ethers";
 import hre, { ethers } from "hardhat";
 import { DKIMRegistry, MailboxFactory, Verifier, ZKRedpacket } from "../types";
 import { calculateRecipient, Signals, signals, tencentDKIMPubkeyHash } from "./constants";
@@ -40,7 +51,12 @@ describe("Redpacket Test", () => {
       await mailboxFactory.getAddress(),
     ]);
 
-    mailBoxInitCode = (await ethers.getContractFactory("TokenMailbox")).bytecode;
+    const creationCode = (await ethers.getContractFactory("TokenMailbox")).bytecode;
+    const args = AbiCoder.defaultAbiCoder().encode(
+      ["address", "address", "bytes32"],
+      [await verifier.getAddress(), await dkim.getAddress(), toBeHex(signals[1])],
+    );
+    mailBoxInitCode = solidityPacked(["bytes", "bytes"], [creationCode, args]);
     recipient = calculateRecipient(await mailboxFactory.getAddress(), mailBoxInitCode);
     proof = await generateCalldata(recipient);
   });
@@ -58,6 +74,7 @@ describe("Redpacket Test", () => {
     await rp.createPacket(10, false, 1800, seed, "name", "Best Wishes", 0, ZeroAddress, parseEther("1"), {
       value: parseEther("1"),
     });
+
     const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
     const rpId = creationSuccessEvent.args.id;
     const balanceBefore = await hre.ethers.provider.getBalance(recipient);
@@ -160,9 +177,38 @@ describe("Redpacket Test", () => {
     await expect(rp.claim(rpId, proof, modifiedSig)).to.be.revertedWith("Invalid recipient");
 
     // Changed last digit of signal[1]
-    const modifiedName = "0x000000000000000000000000000000000039306e6f69746174535f6563617052";
-    const modifiedRecipient = calculateRecipient(await mailboxFactory.getAddress(), mailBoxInitCode, modifiedName);
+    const modifiedName = "0x2ee1548c9e6de8d9fbb3fd2beec8483b933555c099843ee076bd77e188addc62";
+    const creationCode = (await ethers.getContractFactory("TokenMailbox")).bytecode;
+    const args = AbiCoder.defaultAbiCoder().encode(
+      ["address", "address", "bytes32"],
+      [await verifier.getAddress(), await dkim.getAddress(), toBeHex(modifiedName)],
+    );
+    const newInitCode = solidityPacked(["bytes", "bytes"], [creationCode, args]);
+    const modifiedRecipient = calculateRecipient(await mailboxFactory.getAddress(), newInitCode, modifiedName);
     modifiedSig = [signals[0], modifiedName, zeroPadValue(modifiedRecipient, 32)];
     await expect(rp.claim(rpId, proof, modifiedSig)).to.be.revertedWith("Invalid ZK proof");
+  });
+
+  it("withdraw token normal workflow", async () => {
+    signals[2] = zeroPadValue(recipient, 32);
+    await rp.createPacket(10, false, 1800, seed, "name", "Best Wishes", 0, ZeroAddress, parseEther("1"), {
+      value: parseEther("1"),
+    });
+    const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+    const rpId = creationSuccessEvent.args.id;
+    await rp.claim(rpId, proof, signals);
+
+    await mailboxFactory.createMailbox(toBeHex(signals[1]));
+    const deploySuccess = (await mailboxFactory.queryFilter(mailboxFactory.filters.MailboxDeployed()))[0];
+    const mailboxAddr = deploySuccess.args.mailboxAddr;
+    const mailbox = await ethers.getContractAt("TokenMailbox", recipient);
+    expect(mailboxAddr).to.be.eq(recipient);
+
+    log(info("    Generate proof for withdraw may take some time... Est. 1min"));
+    const userAddress = await user.getAddress();
+    const withdrawProof = await generateCalldata(userAddress);
+    const modifiedSig: Signals = [signals[0], signals[1], zeroPadValue(userAddress, 32)];
+
+    await mailbox.withdrawToken(ZeroAddress, userAddress, withdrawProof, modifiedSig);
   });
 });

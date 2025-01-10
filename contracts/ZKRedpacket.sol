@@ -123,8 +123,12 @@ contract ZKRedpacket {
 
         // Check the recipient is the address committed in circuit
         address addressInCircuit = address(uint160(_signals[ADDRESS_INDEX_IN_SIGNAL]));
-        bytes32 userNameHash = keccak256(abi.encodePacked(_signals[USERNAME_INDEX_IN_SIGNAL]));
-        address recipient = Create2.computeAddress(userNameHash, keccak256(type(TokenMailbox).creationCode), deployer);
+        bytes32 userNameHash = bytes32(_signals[USERNAME_INDEX_IN_SIGNAL]);
+        bytes memory byteCode = abi.encodePacked(
+            type(TokenMailbox).creationCode,
+            abi.encode(address(verifier), address(dkimRegistry), userNameHash)
+        );
+        address recipient = Create2.computeAddress(userNameHash, keccak256(byteCode), deployer);
         require(recipient == addressInCircuit, "Invalid recipient");
         require(rp.claimedList[recipient] == 0, "Already claimed");
 

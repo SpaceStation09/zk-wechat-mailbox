@@ -28,6 +28,7 @@ describe("Redpacket Test", () => {
   let dkim: DKIMRegistry;
   let verifier: Verifier;
   let proof: BigNumberish[];
+  let withdrawProof: BigNumberish[];
   let snapshot: SnapshotRestorer;
   let mailBoxInitCode: string;
   let recipient: string;
@@ -35,10 +36,10 @@ describe("Redpacket Test", () => {
   const seed = keccak256(toUtf8Bytes("test"));
 
   before(async () => {
-    log(info("    Test setup phase may take some time since it needs to generate proof data in advance... Est. 1min"));
+    log(info("    Test setup phase may take some time since it needs to generate proof data in advance... Est. 2min"));
     [deployer, user] = await hre.ethers.getSigners();
     dkim = await hre.ethers.deployContract("DKIMRegistry", [await deployer.getAddress()]);
-    await dkim.setDKIMPublicKeyHash("tencent.com", tencentDKIMPubkeyHash);
+    await dkim.setDKIMPublicKeyHash(domain, tencentDKIMPubkeyHash);
 
     verifier = await hre.ethers.deployContract("Verifier");
     mailboxFactory = await hre.ethers.deployContract("MailboxFactory", [
@@ -59,6 +60,8 @@ describe("Redpacket Test", () => {
     mailBoxInitCode = solidityPacked(["bytes", "bytes"], [creationCode, args]);
     recipient = calculateRecipient(await mailboxFactory.getAddress(), mailBoxInitCode);
     proof = await generateCalldata(recipient);
+    const userAddress = await user.getAddress();
+    withdrawProof = await generateCalldata(userAddress);
   });
 
   beforeEach(async () => {
@@ -204,11 +207,50 @@ describe("Redpacket Test", () => {
     const mailbox = await ethers.getContractAt("TokenMailbox", recipient);
     expect(mailboxAddr).to.be.eq(recipient);
 
-    log(info("    Generate proof for withdraw may take some time... Est. 1min"));
     const userAddress = await user.getAddress();
-    const withdrawProof = await generateCalldata(userAddress);
     const modifiedSig: Signals = [signals[0], signals[1], zeroPadValue(userAddress, 32)];
 
+    const balanceBefore = await hre.ethers.provider.getBalance(userAddress);
+    const mailboxBalance = await hre.ethers.provider.getBalance(mailboxAddr);
     await mailbox.withdrawToken(ZeroAddress, userAddress, withdrawProof, modifiedSig);
+    const balanceAfterWithdraw = await hre.ethers.provider.getBalance(userAddress);
+    expect(balanceAfterWithdraw - balanceBefore).to.be.eq(mailboxBalance);
+    expect(mailboxBalance).to.be.eq(parseEther("0.1"));
+  });
+
+  it("withdraw erc20 token normal workflow", async () => {
+    const testToken = await hre.ethers.deployContract("TestToken", [parseEther("1000")]);
+    await testToken.approve(await rp.getAddress(), parseEther("1000"));
+    await rp.createPacket(
+      10,
+      false,
+      1800,
+      seed,
+      "name",
+      "Best Wishes",
+      1,
+      await testToken.getAddress(),
+      parseEther("10"),
+    );
+    const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+    const rpId = creationSuccessEvent.args.id;
+
+    await rp.claim(rpId, proof, signals);
+
+    await mailboxFactory.createMailbox(toBeHex(signals[1]));
+    const deploySuccess = (await mailboxFactory.queryFilter(mailboxFactory.filters.MailboxDeployed()))[0];
+    const mailboxAddr = deploySuccess.args.mailboxAddr;
+    const mailbox = await ethers.getContractAt("TokenMailbox", recipient);
+    expect(mailboxAddr).to.be.eq(recipient);
+
+    const userAddress = await user.getAddress();
+    const modifiedSig: Signals = [signals[0], signals[1], zeroPadValue(userAddress, 32)];
+
+    const balanceBefore = await testToken.balanceOf(userAddress);
+    const mailboxBalance = await testToken.balanceOf(mailboxAddr);
+    await mailbox.withdrawToken(await testToken.getAddress(), userAddress, withdrawProof, modifiedSig);
+    const balanceAfterWithdraw = await testToken.balanceOf(userAddress);
+    expect(balanceAfterWithdraw - balanceBefore).to.be.eq(mailboxBalance);
+    expect(mailboxBalance).to.be.eq(parseEther("1"));
   });
 });

@@ -1,5 +1,9 @@
 import "@nomicfoundation/hardhat-toolbox";
-import { getHardhatNetworkConfig, HardhatGasReporterConfig } from "./SmartContractProjectConfig/config";
+import {
+  EtherscanConfig,
+  getHardhatNetworkConfig,
+  HardhatGasReporterConfig,
+} from "./SmartContractProjectConfig/config";
 
 let networks = getHardhatNetworkConfig();
 let solidity = {
@@ -26,6 +30,7 @@ const config = {
   mocha: {
     timeout: 100000000,
   },
+  etherscan: EtherscanConfig,
   typechain: {
     outDir: "types",
     target: "ethers-v6",

@@ -15,3 +15,4 @@ types/
 artifacts/
 dist
 .DS_Store
+ignition/deployments

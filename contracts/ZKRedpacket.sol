@@ -174,7 +174,7 @@ contract ZKRedpacket {
         rp.packed.packed1 = _rewriteBox(packed.packed1, 128, 96, 0);
 
         if (tokenType == 0) payable(msg.sender).transfer(remainingTokens);
-        IERC20(tokenAddress).safeTransfer(msg.sender, remainingTokens);
+        else IERC20(tokenAddress).safeTransfer(msg.sender, remainingTokens);
         emit RefundSuccess(_id, tokenAddress, remainingTokens);
     }
 

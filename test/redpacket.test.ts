@@ -13,7 +13,7 @@ import {
   ZeroAddress,
   zeroPadValue,
 } from "ethers";
-import hre, { ethers } from "hardhat";
+import hre, { ethers, network } from "hardhat";
 import { DKIMRegistry, MailboxFactory, Verifier, ZKRedpacket } from "../types";
 import { calculateRecipient, Signals, signals, tencentDKIMPubkeyHash } from "./constants";
 import { generateCalldata } from "./generateCalldata";
@@ -169,6 +169,48 @@ describe("Redpacket Test", () => {
     expect(claimedAmount).to.be.eq(parseEther("1"));
   });
 
+  it("claim will fail if the packet is expired", async () => {
+    const testToken = await hre.ethers.deployContract("TestToken", [parseEther("1000")]);
+    await testToken.approve(await rp.getAddress(), parseEther("1000"));
+    await rp.createPacket(
+      10,
+      false,
+      1800,
+      seed,
+      "name",
+      "Best Wishes",
+      1,
+      await testToken.getAddress(),
+      parseEther("10"),
+    );
+    const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+    const rpId = creationSuccessEvent.args.id;
+
+    await network.provider.send("evm_increaseTime", [1801]);
+    await expect(rp.claim(rpId, proof, signals)).to.be.revertedWith("Expired");
+  });
+
+  it("claim will fail if the packet is out of stock", async () => {
+    const testToken = await hre.ethers.deployContract("TestToken", [parseEther("1000")]);
+    await testToken.approve(await rp.getAddress(), parseEther("10"));
+    await rp.createPacket(
+      1,
+      false,
+      1800,
+      seed,
+      "name",
+      "Best Wishes",
+      1,
+      await testToken.getAddress(),
+      parseEther("10"),
+    );
+    const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+    const rpId = creationSuccessEvent.args.id;
+
+    await rp.claim(rpId, proof, signals);
+    await expect(rp.claim(rpId, proof, signals)).to.be.revertedWith("Out of stock");
+  });
+
   it("claim will fail if the recipient is not committed in zk", async () => {
     await rp.createPacket(10, false, 1800, seed, "name", "Best Wishes", 0, ZeroAddress, parseEther("1"), {
       value: parseEther("1"),
@@ -252,5 +294,54 @@ describe("Redpacket Test", () => {
     const balanceAfterWithdraw = await testToken.balanceOf(userAddress);
     expect(balanceAfterWithdraw - balanceBefore).to.be.eq(mailboxBalance);
     expect(mailboxBalance).to.be.eq(parseEther("1"));
+  });
+
+  describe("Refund test", () => {
+    it("Normal refund workflow", async () => {
+      signals[2] = zeroPadValue(recipient, 32);
+      await rp.createPacket(10, false, 1800, seed, "name", "Best Wishes", 0, ZeroAddress, parseEther("1"), {
+        value: parseEther("1"),
+      });
+
+      const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+      const rpId = creationSuccessEvent.args.id;
+      await rp.claim(rpId, proof, signals);
+
+      await network.provider.send("evm_increaseTime", [1801]);
+
+      await rp.refund(rpId);
+      const refundSuccessEvent = (await rp.queryFilter(rp.filters.RefundSuccess()))[0];
+      const claimId = refundSuccessEvent.args.id;
+      expect(claimId).to.be.eq(rpId);
+      expect(refundSuccessEvent.args.tokenAddress).to.be.eq(ZeroAddress);
+      expect(refundSuccessEvent.args.tokenAmount).to.be.eq(parseEther("0.9"));
+    });
+
+    it("Claim will fail if packet not expire", async () => {
+      signals[2] = zeroPadValue(recipient, 32);
+      await rp.createPacket(10, false, 1800, seed, "name", "Best Wishes", 0, ZeroAddress, parseEther("1"), {
+        value: parseEther("1"),
+      });
+
+      const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+      const rpId = creationSuccessEvent.args.id;
+      await rp.claim(rpId, proof, signals);
+
+      await expect(rp.refund(rpId)).to.be.revertedWith("Not expired yet");
+    });
+
+    it("Claim will fail if packet is out of stock", async () => {
+      signals[2] = zeroPadValue(recipient, 32);
+      await rp.createPacket(1, false, 1800, seed, "name", "Best Wishes", 0, ZeroAddress, parseEther("1"), {
+        value: parseEther("1"),
+      });
+
+      const creationSuccessEvent = (await rp.queryFilter(rp.filters.CreationSuccess()))[0];
+      const rpId = creationSuccessEvent.args.id;
+      await rp.claim(rpId, proof, signals);
+
+      await network.provider.send("evm_increaseTime", [1801]);
+      await expect(rp.refund(rpId)).to.be.revertedWith("Nothing left");
+    });
   });
 });

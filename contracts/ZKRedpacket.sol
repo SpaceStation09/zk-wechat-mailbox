@@ -6,6 +6,8 @@ import "@zk-email/contracts/DKIMRegistry.sol";
 import "@zk-email/contracts/utils/StringUtils.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/Create2.sol";
+import "./TokenMailbox.sol";
 
 contract ZKRedpacket {
     using SafeERC20 for IERC20;
@@ -33,6 +35,7 @@ contract ZKRedpacket {
 
     string public constant DOMAIN = "tencent.com";
     uint32 public nonce;
+    address public deployer;
     bytes32 private seed;
     mapping(bytes32 => RedPacket) public rpById;
     DKIMRegistry public dkimRegistry;
@@ -55,10 +58,11 @@ contract ZKRedpacket {
 
     event RefundSuccess(bytes32 indexed id, address tokenAddress, uint tokenAmount);
 
-    constructor(Verifier _verifier, DKIMRegistry _dkimRegistry) {
+    constructor(Verifier _verifier, DKIMRegistry _dkimRegistry, address _deployer) {
         verifier = _verifier;
         dkimRegistry = _dkimRegistry;
         seed = keccak256(abi.encodePacked("Former NBA Commissioner David St", block.timestamp, msg.sender));
+        deployer = _deployer;
     }
 
     function createPacket(
@@ -108,12 +112,7 @@ contract ZKRedpacket {
         );
     }
 
-    function claim(
-        bytes32 _id,
-        address payable _recipient,
-        uint[8] calldata _proof,
-        uint[3] calldata _signals
-    ) external {
+    function claim(bytes32 _id, uint[8] calldata _proof, uint[3] calldata _signals) external {
         RedPacket storage rp = rpById[_id];
         Packed memory packed = rp.packed;
         //Condition Check for Redpacket
@@ -124,9 +123,14 @@ contract ZKRedpacket {
 
         // Check the recipient is the address committed in circuit
         address addressInCircuit = address(uint160(_signals[ADDRESS_INDEX_IN_SIGNAL]));
-        require(_recipient == addressInCircuit, "Invalid recipient");
-        require(rp.claimedList[_recipient] == 0, "Already claimed");
-        bytes32 userNameHash = keccak256(abi.encodePacked(_signals[USERNAME_INDEX_IN_SIGNAL]));
+        bytes32 userNameHash = bytes32(_signals[USERNAME_INDEX_IN_SIGNAL]);
+        bytes memory byteCode = abi.encodePacked(
+            type(TokenMailbox).creationCode,
+            abi.encode(address(verifier), address(dkimRegistry), userNameHash)
+        );
+        address recipient = Create2.computeAddress(userNameHash, keccak256(byteCode), deployer);
+        require(recipient == addressInCircuit, "Invalid recipient");
+        require(rp.claimedList[recipient] == 0, "Already claimed");
 
         // Check email validity via zk
         (bool success, string memory errorMessage) = _checkProof(DOMAIN, _proof, _signals);
@@ -147,13 +151,13 @@ contract ZKRedpacket {
             claimedTokens = remainingTokens / (pktNumber - claimedNumber);
         }
         rp.packed.packed1 = _rewriteBox(packed.packed1, 128, 96, remainingTokens - claimedTokens);
-        rp.claimedList[_recipient] = claimedTokens;
+        rp.claimedList[recipient] = claimedTokens;
         rp.packed.packed2 = _rewriteBox(packed.packed2, 224, 15, claimedNumber + 1);
 
         address tokenAddress = address(uint160(_unbox(packed.packed2, 64, 160)));
-        if (tokenType == 0) _recipient.transfer(claimedTokens);
-        else IERC20(tokenAddress).safeTransfer(_recipient, claimedTokens);
-        emit ClaimSuccess(_id, _recipient, claimedTokens, tokenAddress);
+        if (tokenType == 0) payable(recipient).transfer(claimedTokens);
+        else IERC20(tokenAddress).safeTransfer(recipient, claimedTokens);
+        emit ClaimSuccess(_id, recipient, claimedTokens, tokenAddress);
     }
 
     function refund(bytes32 _id) public {
@@ -170,7 +174,7 @@ contract ZKRedpacket {
         rp.packed.packed1 = _rewriteBox(packed.packed1, 128, 96, 0);
 
         if (tokenType == 0) payable(msg.sender).transfer(remainingTokens);
-        IERC20(tokenAddress).safeTransfer(msg.sender, remainingTokens);
+        else IERC20(tokenAddress).safeTransfer(msg.sender, remainingTokens);
         emit RefundSuccess(_id, tokenAddress, remainingTokens);
     }
 

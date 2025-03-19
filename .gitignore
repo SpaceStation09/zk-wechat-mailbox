@@ -14,3 +14,5 @@ types/
 *.eml
 artifacts/
 dist
+.DS_Store
+ignition/deployments

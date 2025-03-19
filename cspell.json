@@ -9,5 +9,5 @@
     }
   ],
   "dictionaries": ["project-words", "typescript", "node", "npm"],
-  "ignorePaths": ["node_modules", "/project-words.txt", ".github", ".prettierignore", "types"]
+  "ignorePaths": ["node_modules", "/project-words.txt", ".github", ".prettierignore", "types", ".env"]
 }
